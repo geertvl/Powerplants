@@ -1,4 +1,4 @@
-﻿namespace Powerplants.Models
+﻿namespace Powerplants.Dto
 {
     public enum PowerPlantType
     {

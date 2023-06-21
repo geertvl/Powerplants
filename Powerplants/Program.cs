@@ -1,10 +1,17 @@
+using Powerplants.Calculators;
 using Powerplants.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddTransient<ICostCalculator, CostCalculator>();
 builder.Services.AddTransient<IProductionPlanCalculator, ProductionPlanCalculator>();
+
+// My version
+builder.Services.AddTransient<IPowerPlantCostCalculator, PowerPlantCostCalculator>();
+builder.Services.AddTransient<IPowerPlantCalculator, PowerPlantCalculator>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())

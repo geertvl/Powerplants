@@ -6,6 +6,6 @@ namespace Powerplants.Models.Response
     {
         public string Name { get; set; }
         [JsonPropertyName("p")]
-        public decimal Power { get; set; }
+        public double Power { get; set; }
     }
 }

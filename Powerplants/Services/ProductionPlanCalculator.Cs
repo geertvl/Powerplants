@@ -1,42 +1,44 @@
-﻿using Powerplants.Models;
+﻿using Powerplants.Dto;
+using Powerplants.Model;
+using Powerplants.Models;
 using Powerplants.Models.Response;
 
 namespace Powerplants.Services
 {
     public interface ICostCalculator
     {
-        void CalculateCostPer1MWh(Fuel fuels, List<PowerPlant> powerplants);
+        void CalculateCostPer1MWh(Fuel fuels, IEnumerable<PowerPlantDto> powerplants);
     }
 
     public class CostCalculator : ICostCalculator
     {
-        public void CalculateCostPer1MWh(Fuel fuels, List<PowerPlant> powerplants)
+        public void CalculateCostPer1MWh(Fuel fuels, IEnumerable<PowerPlantDto> powerplants)
         {
             CalculateGasFiredPowerPlantCost(fuels, powerplants);
             CalculateTurbojetPowerPlantCost(fuels, powerplants);
             CalculateWindTurbinePowerPlantCost(fuels, powerplants);
         }
 
-        private void CalculateGasFiredPowerPlantCost(Fuel fuels, List<PowerPlant> powerplants)
+        private void CalculateGasFiredPowerPlantCost(Fuel fuels, IEnumerable<PowerPlantDto> powerplants)
         {
             powerplants
-                .Where(p => p.Type == PowerPlantType.GASFIRED.ToString().ToLower())
+                .Where(p => p.Type == PowerPlantType.GASFIRED)
                 .ToList()
                 .ForEach(powerPlant => powerPlant.CostPer1Mwh = 1 / powerPlant.Efficiency * fuels.GasEuroPerMWh);
         }
 
-        private void CalculateTurbojetPowerPlantCost(Fuel fuels, List<PowerPlant> powerplants)
+        private void CalculateTurbojetPowerPlantCost(Fuel fuels, IEnumerable<PowerPlantDto> powerplants)
         {
             powerplants
-                .Where(p => p.Type == PowerPlantType.TURBOJET.ToString().ToLower())
+                .Where(p => p.Type == PowerPlantType.TURBOJET)
                 .ToList()
                 .ForEach(powerPlant => powerPlant.CostPer1Mwh = 1 / powerPlant.Efficiency * fuels.KerosineEuroPerMWh);
         }
 
-        private void CalculateWindTurbinePowerPlantCost(Fuel fuels, List<PowerPlant> powerplants)
+        private void CalculateWindTurbinePowerPlantCost(Fuel fuels, IEnumerable<PowerPlantDto> powerplants)
         {
             powerplants
-                .Where(p => p.Type == PowerPlantType.WINDTURBINE.ToString().ToLower())
+                .Where(p => p.Type == PowerPlantType.WINDTURBINE)
                 .ToList()
                 .ForEach(powerPlant =>
                 {
@@ -48,7 +50,7 @@ namespace Powerplants.Services
 
     public interface IProductionPlanCalculator
     {
-        IEnumerable<ProducedPower> CalculateProductionPlan(Payload payload);
+        IEnumerable<ProducedPower> CalculateProductionPlan(Fuel fuel, double load, IEnumerable<PowerPlantDto> powerPlants);
     }
 
     public class ProductionPlanCalculator : IProductionPlanCalculator
@@ -64,22 +66,20 @@ namespace Powerplants.Services
             _costCalculator = costCalculator;
         }
 
-        public IEnumerable<ProducedPower> CalculateProductionPlan(Payload payload)
+        public IEnumerable<ProducedPower> CalculateProductionPlan(Fuel fuel, double load, IEnumerable<PowerPlantDto> powerPlants)
         {
             _logger.LogInformation("Calculating production plan");
 
-            _costCalculator.CalculateCostPer1MWh(payload.Fuels, payload.PowerPlants);
-            payload.PowerPlants = payload.PowerPlants.OrderBy(p => p.CostPer1Mwh).ToList();
-
-            return CalculatePowerPerPowerplant(payload);
+            _costCalculator.CalculateCostPer1MWh(fuel, powerPlants);
+            return CalculatePowerPerPowerplant(load, powerPlants.OrderBy(p => p.CostPer1Mwh));
         }
 
-        private IEnumerable<ProducedPower> CalculatePowerPerPowerplant(Payload payload)
+        private IEnumerable<ProducedPower> CalculatePowerPerPowerplant(double load, IEnumerable<PowerPlantDto> powerPlants)
         {
-            var producedPowers = payload.PowerPlants.Select(powerPlant =>
+            var producedPowers = powerPlants.Select(powerPlant =>
             {
-                var power = Math.Min(powerPlant.Pmax, payload.Load);
-                payload.Load -= power;
+                var power = Math.Min(powerPlant.Pmax, load);
+                load -= power;
                 return new ProducedPower
                 {
                     Name = powerPlant.Name,
