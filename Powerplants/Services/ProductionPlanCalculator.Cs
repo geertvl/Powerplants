@@ -3,69 +3,91 @@ using Powerplants.Models.Response;
 
 namespace Powerplants.Services
 {
+    public interface ICostCalculator
+    {
+        void CalculateCostPer1MWh(Fuel fuels, List<PowerPlant> powerplants);
+    }
+
+    public class CostCalculator : ICostCalculator
+    {
+        public void CalculateCostPer1MWh(Fuel fuels, List<PowerPlant> powerplants)
+        {
+            CalculateGasFiredPowerPlantCost(fuels, powerplants);
+            CalculateTurbojetPowerPlantCost(fuels, powerplants);
+            CalculateWindTurbinePowerPlantCost(fuels, powerplants);
+        }
+
+        private void CalculateGasFiredPowerPlantCost(Fuel fuels, List<PowerPlant> powerplants)
+        {
+            powerplants
+                .Where(p => p.Type == PowerPlantType.GASFIRED.ToString().ToLower())
+                .ToList()
+                .ForEach(powerPlant => powerPlant.CostPer1Mwh = 1 / powerPlant.Efficiency * fuels.GasEuroPerMWh);
+        }
+
+        private void CalculateTurbojetPowerPlantCost(Fuel fuels, List<PowerPlant> powerplants)
+        {
+            powerplants
+                .Where(p => p.Type == PowerPlantType.TURBOJET.ToString().ToLower())
+                .ToList()
+                .ForEach(powerPlant => powerPlant.CostPer1Mwh = 1 / powerPlant.Efficiency * fuels.KerosineEuroPerMWh);
+        }
+
+        private void CalculateWindTurbinePowerPlantCost(Fuel fuels, List<PowerPlant> powerplants)
+        {
+            powerplants
+                .Where(p => p.Type == PowerPlantType.WINDTURBINE.ToString().ToLower())
+                .ToList()
+                .ForEach(powerPlant =>
+                {
+                    powerPlant.CostPer1Mwh = 0;
+                    powerPlant.Pmax *= fuels.WindPercentage / 100;
+                });
+        }
+    }
+
+    public interface IProductionPlanCalculator
+    {
+        IEnumerable<ProducedPower> CalculateProductionPlan(Payload payload);
+    }
+
     public class ProductionPlanCalculator : IProductionPlanCalculator
     {
         private readonly ILogger<ProductionPlanCalculator> _logger;
+        private readonly ICostCalculator _costCalculator;
 
-        public ProductionPlanCalculator(ILogger<ProductionPlanCalculator> logger)
+        public ProductionPlanCalculator(
+            ILogger<ProductionPlanCalculator> logger,
+            ICostCalculator costCalculator)
         {
             _logger = logger;
+            _costCalculator = costCalculator;
         }
 
-        public List<ProducedPower> CalculateProductionPlan(Payload payload)
+        public IEnumerable<ProducedPower> CalculateProductionPlan(Payload payload)
         {
             _logger.LogInformation("Calculating production plan");
-            calculateCostPer1MWh(payload.Fuels, payload.PowerPlants);
+
+            _costCalculator.CalculateCostPer1MWh(payload.Fuels, payload.PowerPlants);
             payload.PowerPlants = payload.PowerPlants.OrderBy(p => p.CostPer1Mwh).ToList();
 
-            return calculatePowerPerPowerplant(payload);
+            return CalculatePowerPerPowerplant(payload);
         }
 
-        private List<ProducedPower> calculatePowerPerPowerplant(Payload payload)
+        private IEnumerable<ProducedPower> CalculatePowerPerPowerplant(Payload payload)
         {
-            List<ProducedPower> producedPowers = new List<ProducedPower>();
-            var neededLoad = payload.Load;
-
-            payload.PowerPlants.ForEach(powerplant =>
+            var producedPowers = payload.PowerPlants.Select(powerPlant =>
             {
-                if (powerplant.Pmax <= neededLoad && neededLoad > 0)
+                var power = Math.Min(powerPlant.Pmax, payload.Load);
+                payload.Load -= power;
+                return new ProducedPower
                 {
-                    producedPowers.Add(new ProducedPower
-                    {
-                        Name = powerplant.Name,
-                        Power = powerplant.Pmax
-                    });
-                    neededLoad -= powerplant.Pmax;
-                }
-                else if (powerplant.Pmax > neededLoad && neededLoad > 0)
-                {
-                    producedPowers.Add(new ProducedPower
-                    {
-                        Name = powerplant.Name,
-                        Power = neededLoad
-                    });
-                    neededLoad -= neededLoad;
-                }
-                else
-                {
-                    producedPowers.Add(new ProducedPower
-                    {
-                        Name = powerplant.Name,
-                        Power = 0
-                    });
-                }
+                    Name = powerPlant.Name,
+                    Power = power
+                };
             });
 
             return producedPowers;
-        }
-
-
-        private void calculateCostPer1MWh(Fuel fuels, List<PowerPlant> powerplants)
-        {
-            powerplants.Where(p => p.Type == PowerPlantType.GASFIRED.ToString().ToLower()).ToList().ForEach(gasFiredPowerplant => gasFiredPowerplant.CostPer1Mwh = 1 / gasFiredPowerplant.Efficiency * fuels.GasEuroPerMWh);
-            powerplants.Where(t => t.Type == PowerPlantType.TURBOJET.ToString().ToLower()).ToList().ForEach(turbojetPowerplant => turbojetPowerplant.CostPer1Mwh = 1 / turbojetPowerplant.Efficiency * fuels.KerosineEuroPerMWh);
-            powerplants.Where(x => x.Type == PowerPlantType.WINDTURBINE.ToString().ToLower()).ToList().ForEach(windTurbinePowerplant  => windTurbinePowerplant.CostPer1Mwh = 0);
-            powerplants.Where(x => x.Type == PowerPlantType.WINDTURBINE.ToString().ToLower()).ToList().ForEach(windTurbinePowerplant => windTurbinePowerplant.Pmax = windTurbinePowerplant.Pmax * fuels.WindPercentage / 100);
         }
     }
 }

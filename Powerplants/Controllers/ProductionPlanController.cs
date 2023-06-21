@@ -18,21 +18,30 @@ namespace Powerplants.Controllers
         }
 
         [HttpPost]
-        public IActionResult CreateProductionPlan([FromBody] Payload payload)
+        public ActionResult<IEnumerable<ProducedPower>> CreateProductionPlan([FromBody] Payload payload)
         {
             _logger.LogInformation("Start creation of production plan");
-            List<ProducedPower> productionPlans = new List<ProducedPower>();
+
+            if (!ModelState.IsValid)
+            {
+                // If the payload is invalid, return a BadRequest response with error details
+                var errors = ModelState.Values.SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .ToList();
+
+                return BadRequest(errors);
+            }
+
             try
             {
-                productionPlans = _productionPlanCalculator.CalculateProductionPlan(payload);
+                var productionPlans = _productionPlanCalculator.CalculateProductionPlan(payload);
+                return Ok(productionPlans);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex.Message);
-                throw new Exception();
+                return StatusCode(500, "An error occurred while creating the production plan.");
             }
-
-            return Ok(productionPlans);
         }
     }
 }
